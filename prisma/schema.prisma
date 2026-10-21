@@ -1,0 +1,139 @@
+// ---------------------------------------------------------------------------
+// Cloud Storage — Prisma schema
+// ---------------------------------------------------------------------------
+// Design notes
+//  * Every row that can be addressed by a URL carries a UUID primary key.
+//    Raw folder/file names are NEVER used to build a filesystem path or an
+//    object-storage key, which removes the whole path-traversal attack class.
+//  * `storageKey` is an opaque, server-generated identifier (e.g.
+//    `u/<userId>/<fileId>`). The human readable `name` lives in the DB only.
+//  * Soft deletes (`isTrashed`) drive the Trash feature; rows are only removed
+//    permanently after the user confirms.
+//  * `size` is a BigInt because a single file may exceed 2 GiB.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum FileStatus {
+  /// Row created, bytes not uploaded yet.
+  PENDING
+  /// Bytes are present in the object store and verified.
+  READY
+  /// Upload failed / was aborted — the object is scheduled for cleanup.
+  FAILED
+}
+
+enum SharePermission {
+  VIEW
+  EDIT
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  name         String
+  /// Nullable so that OAuth-only accounts (no password) are supported.
+  passwordHash String?
+  image        String?
+  role         Role      @default(USER)
+  /// Hard storage allowance in bytes.
+  storageQuota BigInt    @default(5368709120)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  folders        Folder[]
+  files          File[]
+  ownedShares    Share[] @relation("ShareOwner")
+  receivedShares Share[] @relation("ShareRecipient")
+
+  @@index([createdAt])
+}
+
+model Folder {
+  id       String  @id @default(uuid()) @db.Uuid
+  /// Sanitised, display name.
+  name     String
+  /// Lower-cased name used for case-insensitive uniqueness checks.
+  nameKey  String
+  ownerId  String  @db.Uuid
+  /// `null` means "My Drive" root level.
+  parentId String? @db.Uuid
+  isTrashed Boolean @default(false)
+  trashedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  parent   Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Folder[] @relation("FolderTree")
+  files    File[]
+  shares   Share[]
+
+  @@index([ownerId, parentId, isTrashed])
+  @@index([ownerId, isTrashed, updatedAt])
+  @@index([parentId])
+}
+
+model File {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String
+  nameKey   String
+  mimeType  String
+  /// Size in bytes.
+  size       BigInt     @default(0)
+  /// Opaque object-store key. Never derived from user input.
+  storageKey String    @unique
+  ownerId   String     @db.Uuid
+  folderId  String?    @db.Uuid
+  status    FileStatus @default(PENDING)
+  isTrashed Boolean    @default(false)
+  trashedAt DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  owner  User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  folder Folder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  shares Share[]
+
+  @@index([ownerId, folderId, isTrashed])
+  @@index([ownerId, isTrashed, createdAt])
+  @@index([ownerId, status])
+}
+
+model Share {
+  id          String          @id @default(uuid()) @db.Uuid
+  /// Public, unguessable token used in share links.
+  token       String          @unique
+  fileId      String?         @db.Uuid
+  folderId    String?         @db.Uuid
+  ownerId     String          @db.Uuid
+  /// Optional: when set the share is restricted to a specific account.
+  recipientId String?         @db.Uuid
+  permission  SharePermission @default(VIEW)
+  expiresAt   DateTime?
+  createdAt   DateTime        @default(now())
+  lastAccessAt DateTime?
+
+  owner     User     @relation("ShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recipient User?    @relation("ShareRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  file      File?    @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, createdAt])
+  @@index([recipientId, createdAt])
+  @@index([fileId])
+  @@index([folderId])
+}
