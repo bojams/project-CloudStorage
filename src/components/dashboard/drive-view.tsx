@@ -1,0 +1,436 @@
+"use client";
+
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowDownAZ,
+  Clock,
+  FileUp,
+  FolderPlus,
+  HardDrive,
+  LayoutGrid,
+  List,
+  Plus,
+  Ruler,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { Breadcrumbs } from "@/components/dashboard/breadcrumbs";
+import { DeleteDialog, RestoreDialog } from "@/components/dashboard/dialogs/delete-dialog";
+import { MoveDialog } from "@/components/dashboard/dialogs/move-dialog";
+import { NewFolderDialog } from "@/components/dashboard/dialogs/new-folder-dialog";
+import { PreviewDialog } from "@/components/dashboard/dialogs/preview-dialog";
+import { RenameDialog } from "@/components/dashboard/dialogs/rename-dialog";
+import { ShareDialog } from "@/components/dashboard/dialogs/share-dialog";
+import { EmptyState } from "@/components/dashboard/empty-state";
+import { FileGrid } from "@/components/dashboard/file-grid";
+import { FileList } from "@/components/dashboard/file-list";
+import type { DriveMode } from "@/components/dashboard/item-menu";
+import { UploadDropzone } from "@/components/dashboard/upload-dropzone";
+import { UploadPanel } from "@/components/dashboard/upload-panel";
+import { ViewToggle } from "@/components/dashboard/view-toggle";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useUploadManager } from "@/hooks/use-upload-manager";
+import { cn } from "@/lib/utils";
+import type { Breadcrumb, DriveItem, SortDirection, SortKey, ViewMode } from "@/types";
+
+const VIEW_STORAGE_KEY = "nimbus.drive.view";
+
+interface DriveViewProps {
+  readonly items: DriveItem[];
+  readonly breadcrumbs: Breadcrumb[];
+  readonly currentFolderId: string | null;
+  readonly mode?: DriveMode;
+  readonly emptyTitle?: string;
+  readonly emptyDescription?: string;
+  readonly showToolbar?: boolean;
+  /** Uploading is only possible inside folders the user owns. */
+  readonly canUpload?: boolean;
+}
+
+export function DriveView({
+  items,
+  breadcrumbs,
+  currentFolderId,
+  mode = "drive",
+  emptyTitle = "This folder is empty",
+  emptyDescription = "Drag files here or upload them to get started.",
+  showToolbar = true,
+  canUpload = true,
+}: DriveViewProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<DriveItem | null>(null);
+  const [moveTarget, setMoveTarget] = useState<DriveItem | null>(null);
+  const [shareTarget, setShareTarget] = useState<DriveItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DriveItem | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<DriveItem | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<DriveItem | null>(null);
+
+  const uploadManager = useUploadManager(() => router.refresh());
+
+  // Restore the persisted view preference once mounted.
+  useEffect(() => {
+    const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    if (stored === "grid" || stored === "list") setViewMode(stored);
+  }, []);
+
+  /**
+   * The sidebar lives outside the page tree, so it triggers actions through
+   * the URL (`?action=new-folder` / `?action=upload`). The flag is consumed
+   * once and removed from the address bar afterwards.
+   */
+  useEffect(() => {
+    const action = searchParams.get("action");
+    if (!action) return;
+
+    if (action === "new-folder") {
+      setNewFolderOpen(true);
+    }
+
+    if (action === "upload") {
+      window.setTimeout(() => fileInputRef.current?.click(), 0);
+    }
+
+    // Consume the flag so a reload does not repeat the action.
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("action");
+    const query = params.toString();
+    router.replace(`${window.location.pathname}${query ? `?${query}` : ""}`);
+  }, [router, searchParams]);
+
+  useEffect(() => {
+    window.localStorage.setItem(VIEW_STORAGE_KEY, viewMode);
+  }, [viewMode]);
+
+  const sortedItems = useMemo(() => {
+    const direction = sortDirection === "asc" ? 1 : -1;
+
+    return [...items].sort((a, b) => {
+      // Folders always come first.
+      if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+
+      switch (sortKey) {
+        case "size":
+          return (a.size - b.size) * direction;
+        case "updatedAt":
+        case "createdAt":
+          return (
+            (new Date(a.updatedAt).getTime() -
+              new Date(b.updatedAt).getTime()) *
+            direction
+          );
+        case "name":
+        default:
+          return a.name.localeCompare(b.name, undefined, {
+            numeric: true,
+            sensitivity: "base",
+          }) * direction;
+      }
+    });
+  }, [items, sortKey, sortDirection]);
+
+  const handleOpen = useCallback(
+    (item: DriveItem) => {
+      if (item.type === "folder") {
+        router.push(`/drive/${item.id}`);
+        return;
+      }
+      setPreviewTarget(item);
+    },
+    [router],
+  );
+
+  const handleFilesSelected = useCallback(
+    (files: File[]) => {
+      uploadManager.addFiles(files, currentFolderId);
+    },
+    [currentFolderId, uploadManager],
+  );
+
+  const actions = useMemo(
+    () => ({
+      onRename: setRenameTarget,
+      onShare: setShareTarget,
+      onMove: setMoveTarget,
+      onDelete: setDeleteTarget,
+      onRestore: setRestoreTarget,
+    }),
+    [],
+  );
+
+  return (
+    <div className="flex min-h-full flex-col">
+      {showToolbar ? (
+        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <Breadcrumbs items={breadcrumbs} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {mode === "drive" && canUpload ? (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files ?? []);
+                    if (files.length > 0) handleFilesSelected(files);
+                    event.target.value = "";
+                  }}
+                />
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="size-4" />
+                  Upload
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setNewFolderOpen(true)}
+                >
+                  <FolderPlus className="size-4" />
+                  New folder
+                </Button>
+              </>
+            ) : null}
+
+            <SortMenu
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onChange={(key, direction) => {
+                setSortKey(key);
+                setSortDirection(direction);
+              }}
+            />
+
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
+      ) : null}
+
+      <UploadDropzone
+        onFiles={handleFilesSelected}
+        disabled={mode !== "drive" || !canUpload}
+      >
+        {sortedItems.length === 0 ? (
+          <EmptyState
+            icon={mode === "trash" ? Trash2 : HardDrive}
+            title={mode === "trash" ? "Trash is empty" : emptyTitle}
+            description={
+              mode === "trash"
+                ? "Items you delete will appear here before they are permanently removed."
+                : emptyDescription
+            }
+            action={
+              mode === "drive" && canUpload ? (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="gradient"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FileUp className="size-4" />
+                    Upload files
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setNewFolderOpen(true)}
+                  >
+                    <Plus className="size-4" />
+                    New folder
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
+        ) : (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={viewMode}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {viewMode === "grid" ? (
+                <FileGrid
+                  items={sortedItems}
+                  mode={mode}
+                  actions={actions}
+                  onOpen={handleOpen}
+                />
+              ) : (
+                <FileList
+                  items={sortedItems}
+                  mode={mode}
+                  actions={actions}
+                  onOpen={handleOpen}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        )}
+      </UploadDropzone>
+
+      <UploadPanel
+        tasks={uploadManager.tasks}
+        onCancel={uploadManager.cancel}
+        onDismiss={uploadManager.dismiss}
+        onClearFinished={uploadManager.clearFinished}
+      />
+
+      <NewFolderDialog
+        open={newFolderOpen}
+        onOpenChange={setNewFolderOpen}
+        parentId={currentFolderId}
+      />
+
+      <RenameDialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null);
+        }}
+        item={renameTarget}
+      />
+
+      <MoveDialog
+        open={moveTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setMoveTarget(null);
+        }}
+        item={moveTarget}
+      />
+
+      <ShareDialog
+        open={shareTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setShareTarget(null);
+        }}
+        item={shareTarget}
+      />
+
+      <DeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        item={deleteTarget}
+        mode={mode}
+      />
+
+      <RestoreDialog
+        open={restoreTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRestoreTarget(null);
+        }}
+        item={restoreTarget}
+      />
+
+      <PreviewDialog
+        open={previewTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewTarget(null);
+        }}
+        item={previewTarget}
+        onShare={(item) => {
+          setPreviewTarget(null);
+          setShareTarget(item);
+        }}
+        onRename={(item) => {
+          setPreviewTarget(null);
+          setRenameTarget(item);
+        }}
+      />
+    </div>
+  );
+}
+
+interface SortMenuProps {
+  readonly sortKey: SortKey;
+  readonly sortDirection: SortDirection;
+  readonly onChange: (key: SortKey, direction: SortDirection) => void;
+}
+
+function SortMenu({ sortKey, sortDirection, onChange }: SortMenuProps) {
+  const options: {
+    key: SortKey;
+    label: string;
+    icon: typeof ArrowDownAZ;
+  }[] = [
+    { key: "name", label: "Name", icon: ArrowDownAZ },
+    { key: "size", label: "Size", icon: Ruler },
+    { key: "updatedAt", label: "Last modified", icon: Clock },
+  ];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm">
+          <LayoutGrid className="size-4" />
+          <span className="hidden sm:inline">Sort</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+        {options.map((option) => {
+          const Icon = option.icon;
+          const isActive = sortKey === option.key;
+
+          return (
+            <DropdownMenuItem
+              key={option.key}
+              onSelect={() =>
+                onChange(
+                  option.key,
+                  isActive && sortDirection === "asc" ? "desc" : "asc",
+                )
+              }
+              className={cn(isActive && "bg-accent/60")}
+            >
+              <Icon className="size-4" />
+              {option.label}
+              {isActive ? (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {sortDirection === "asc" ? "↑" : "↓"}
+                </span>
+              ) : null}
+            </DropdownMenuItem>
+          );
+        })}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => onChange("name", "asc")}>
+          <List className="size-4" />
+          Reset sorting
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
