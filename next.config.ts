@@ -57,11 +57,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
-        headers: securityHeaders,
-      },
-      {
-        source: "/api/:path*",
+        // The download endpoints deliver untrusted bytes and therefore carry
+        // their own, much stricter policy (see `src/lib/http/headers.ts`).
+        source: "/:path((?!api/files/.*/download|api/public/.*/download).*)",
         headers: securityHeaders,
       },
     ];

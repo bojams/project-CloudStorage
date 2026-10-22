@@ -74,7 +74,12 @@ export class LocalStorageDriver implements StorageDriver {
     };
   }
 
-  async createDownloadUrl(): Promise<string | null> {
+  async createDownloadUrl(input: {
+    key: string;
+    fileName: string;
+    expiresInSeconds: number;
+  }): Promise<string | null> {
+    assertSafeStorageKey(input.key);
     // The local driver streams through the authenticated download route.
     return null;
   }

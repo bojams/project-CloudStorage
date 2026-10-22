@@ -59,6 +59,11 @@ export function sanitizeName(rawName: string): string {
   if (name === "." || name === "..") {
     throw new SanitizationError("Invalid name.");
   }
+  // A name made of dots only ("...", "....") is a path reference on some
+  // file systems and never a meaningful name.
+  if (/^\.+$/.test(name)) {
+    throw new SanitizationError("Invalid name.");
+  }
   if (RESERVED_WINDOWS_NAMES.test(name)) {
     throw new SanitizationError(
       `"${name}" is a reserved device name and cannot be used.`,

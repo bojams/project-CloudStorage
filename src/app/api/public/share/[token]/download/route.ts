@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { DOWNLOAD_GRANT_TTL } from "@/lib/constants";
 import { getPublicSharedFile } from "@/lib/db/queries/shares";
+import { FILE_RESPONSE_HEADERS } from "@/lib/http/headers";
+import { isInlineSafeMimeType } from "@/lib/security/mime";
 import { getStorageDriver } from "@/lib/storage";
 
 /**
@@ -32,7 +34,10 @@ export async function GET(
   }
 
   const driver = getStorageDriver();
-  const isInline = new URL(request.url).searchParams.get("disposition") === "inline";
+  // Scriptable payloads are never rendered inside the application origin.
+  const isInline =
+    new URL(request.url).searchParams.get("disposition") === "inline" &&
+    isInlineSafeMimeType(file.mimeType);
   const encodedName = encodeURIComponent(file.name);
 
   const downloadUrl = await driver.createDownloadUrl({
@@ -53,10 +58,10 @@ export async function GET(
   return new Response(new Uint8Array(buffer), {
     status: 200,
     headers: {
-      "Content-Type": file.mimeType,
+      ...FILE_RESPONSE_HEADERS,
+      "Content-Type": isInline ? file.mimeType : "application/octet-stream",
       "Content-Length": String(buffer.byteLength),
       "Content-Disposition": `${isInline ? "inline" : "attachment"}; filename*=UTF-8''${encodedName}`,
-      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, no-store",
     },
   });

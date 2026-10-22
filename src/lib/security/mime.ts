@@ -189,11 +189,48 @@ const MIME_REGISTRY: Readonly<Record<string, MimeDescriptor>> = {
   },
 };
 
-const ALLOWED_MIME_TYPES = new Set(Object.keys(MIME_REGISTRY));
+/**
+ * Types a browser is able to *execute* when the document is opened directly.
+ *
+ * They are rejected at upload time and are never served with an inline
+ * disposition, because the application origin would otherwise run the
+ * attacker's script with the victim's session.
+ */
+const SCRIPTABLE_MIME_TYPES = new Set([
+  "text/html",
+  "application/xhtml+xml",
+  "image/svg+xml",
+]);
 
-/** SVG is scriptable — it is intentionally *not* part of the allow-list. */
+/**
+ * Types that are safe to store but must not be rendered inside the
+ * application origin (XML can reference an XSLT stylesheet that emits
+ * active content).
+ */
+const INLINE_UNSAFE_MIME_TYPES = new Set([
+  ...SCRIPTABLE_MIME_TYPES,
+  "application/xml",
+  "text/xml",
+  "application/xslt+xml",
+]);
+
+const ALLOWED_MIME_TYPES = new Set(
+  Object.keys(MIME_REGISTRY).filter(
+    (mimeType) => !SCRIPTABLE_MIME_TYPES.has(mimeType),
+  ),
+);
+
+/** SVG and HTML are scriptable — they are intentionally *not* uploadable. */
 export function isAllowedMimeType(mimeType: string): boolean {
   return ALLOWED_MIME_TYPES.has(normalizeMimeType(mimeType));
+}
+
+/**
+ * True when the payload may be served with `Content-Disposition: inline`.
+ * Scriptable types are always delivered as an attachment instead.
+ */
+export function isInlineSafeMimeType(mimeType: string): boolean {
+  return !INLINE_UNSAFE_MIME_TYPES.has(normalizeMimeType(mimeType));
 }
 
 export function normalizeMimeType(mimeType: string): string {

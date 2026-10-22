@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/client";
 import { DOWNLOAD_GRANT_TTL } from "@/lib/constants";
+import { FILE_RESPONSE_HEADERS } from "@/lib/http/headers";
+import { isInlineSafeMimeType } from "@/lib/security/mime";
 import { getStorageDriver } from "@/lib/storage";
 
 /**
@@ -57,7 +59,10 @@ export async function GET(
   const driver = getStorageDriver();
   const disposition = new URL(request.url).searchParams.get("disposition");
 
-  const isInline = disposition === "inline";
+  // Scriptable payloads (HTML, SVG, XML) are never rendered inside the
+  // application origin: they would execute with the session of whoever
+  // opened the link. They are always delivered as an attachment.
+  const isInline = disposition === "inline" && isInlineSafeMimeType(file.mimeType);
   const encodedName = encodeURIComponent(file.name);
 
   const downloadUrl = await driver.createDownloadUrl({
@@ -78,10 +83,10 @@ export async function GET(
   return new Response(new Uint8Array(buffer), {
     status: 200,
     headers: {
-      "Content-Type": file.mimeType,
+      ...FILE_RESPONSE_HEADERS,
+      "Content-Type": isInline ? file.mimeType : "application/octet-stream",
       "Content-Length": String(buffer.byteLength),
       "Content-Disposition": `${isInline ? "inline" : "attachment"}; filename*=UTF-8''${encodedName}`,
-      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, no-store",
     },
   });
