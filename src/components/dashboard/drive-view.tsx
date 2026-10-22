@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useUploadManager } from "@/hooks/use-upload-manager";
+import { MAX_UPLOAD_SIZE } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { Breadcrumb, DriveItem, SortDirection, SortKey, ViewMode } from "@/types";
 
@@ -61,6 +62,8 @@ const loadDeleteDialog = () =>
   import("@/components/dashboard/dialogs/delete-dialog");
 const loadPreviewDialog = () =>
   import("@/components/dashboard/dialogs/preview-dialog");
+const loadVersionHistoryDialog = () =>
+  import("@/components/dashboard/dialogs/version-history-dialog");
 
 const NewFolderDialog = dynamic(
   () => loadNewFolderDialog().then((module) => module.NewFolderDialog),
@@ -90,6 +93,10 @@ const PreviewDialog = dynamic(
   () => loadPreviewDialog().then((module) => module.PreviewDialog),
   { ssr: false },
 );
+const VersionHistoryDialog = dynamic(
+  () => loadVersionHistoryDialog().then((module) => module.VersionHistoryDialog),
+  { ssr: false },
+);
 
 const VIEW_STORAGE_KEY = "nimbus.drive.view";
 
@@ -103,6 +110,10 @@ interface DriveViewProps {
   readonly showToolbar?: boolean;
   /** Uploading is only possible inside folders the user owns. */
   readonly canUpload?: boolean;
+  /** Whether the account may use the premium features. */
+  readonly isPremium?: boolean;
+  /** Maximum size of a single upload for the active plan. */
+  readonly maxFileSizeBytes?: number;
 }
 
 export function DriveView({
@@ -114,6 +125,8 @@ export function DriveView({
   emptyDescription = "Drag files here or upload them to get started.",
   showToolbar = true,
   canUpload = true,
+  isPremium = false,
+  maxFileSizeBytes = MAX_UPLOAD_SIZE,
 }: DriveViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -130,8 +143,12 @@ export function DriveView({
   const [deleteTarget, setDeleteTarget] = useState<DriveItem | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<DriveItem | null>(null);
   const [previewTarget, setPreviewTarget] = useState<DriveItem | null>(null);
+  const [versionTarget, setVersionTarget] = useState<DriveItem | null>(null);
 
-  const uploadManager = useUploadManager(() => router.refresh());
+  const uploadManager = useUploadManager(
+    () => router.refresh(),
+    maxFileSizeBytes,
+  );
 
   // Restore the persisted view preference once mounted.
   useEffect(() => {
@@ -256,8 +273,10 @@ export function DriveView({
       onMove: setMoveTarget,
       onDelete: setDeleteTarget,
       onRestore: setRestoreTarget,
+      onVersions: setVersionTarget,
+      isPremium,
     }),
-    [],
+    [isPremium],
   );
 
   return (
@@ -460,6 +479,17 @@ export function DriveView({
             setPreviewTarget(null);
             setRenameTarget(item);
           }}
+        />
+      ) : null}
+
+      {versionTarget ? (
+        <VersionHistoryDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setVersionTarget(null);
+          }}
+          item={versionTarget}
+          isPremium={isPremium}
         />
       ) : null}
     </div>

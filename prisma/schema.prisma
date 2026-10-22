@@ -40,41 +40,67 @@ enum SharePermission {
   EDIT
 }
 
+/// Subscription tier. The plan decides the storage quota, the maximum file
+/// size, how long the trash is kept and whether version history is enabled.
+enum Plan {
+  FREE
+  PREMIUM
+}
+
+/// State of an archived file revision.
+enum FileVersionStatus {
+  /// The bytes were reserved but the upload has not been confirmed yet.
+  PENDING
+  /// The revision is complete and can be restored.
+  READY
+}
+
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  email        String    @unique
-  name         String
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String    @unique
+  name           String
   /// Nullable so that OAuth-only accounts (no password) are supported.
-  passwordHash String?
-  image        String?
-  role         Role      @default(USER)
-  /// Hard storage allowance in bytes.
-  storageQuota BigInt    @default(5368709120)
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  passwordHash   String?
+  image          String?
+  role           Role      @default(USER)
+  /// Hard storage allowance in bytes. Kept in sync with the plan.
+  storageQuota   BigInt    @default(5368709120)
+  /// Subscription tier — drives quota, file size limit and premium features.
+  plan           Plan      @default(FREE)
+  planStartedAt  DateTime?
+  planExpiresAt  DateTime?
+  /// Storage key of the profile photo (`a/<userId>/<avatarId>`).
+  imageKey       String?
+  /// Content type of the stored profile photo.
+  imageMimeType  String?
+  /// Bumped on every photo change so the browser cache is invalidated.
+  imageUpdatedAt DateTime?
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   folders        Folder[]
   files          File[]
-  ownedShares    Share[] @relation("ShareOwner")
-  receivedShares Share[] @relation("ShareRecipient")
+  ownedShares    Share[]  @relation("ShareOwner")
+  receivedShares Share[]  @relation("ShareRecipient")
 
   @@index([createdAt])
+  @@index([plan])
 }
 
 model Folder {
-  id       String  @id @default(uuid()) @db.Uuid
+  id        String    @id @default(uuid()) @db.Uuid
   /// Sanitised, display name.
-  name     String
+  name      String
   /// Lower-cased name used for case-insensitive uniqueness checks.
-  nameKey  String
-  ownerId  String  @db.Uuid
+  nameKey   String
+  ownerId   String    @db.Uuid
   /// `null` means "My Drive" root level.
-  parentId String? @db.Uuid
-  isTrashed Boolean @default(false)
+  parentId  String?   @db.Uuid
+  isTrashed Boolean   @default(false)
   trashedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   parent   Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
@@ -88,49 +114,69 @@ model Folder {
 }
 
 model File {
-  id        String     @id @default(uuid()) @db.Uuid
-  name      String
-  nameKey   String
-  mimeType  String
+  id         String     @id @default(uuid()) @db.Uuid
+  name       String
+  nameKey    String
+  mimeType   String
   /// Size in bytes.
   size       BigInt     @default(0)
   /// Opaque object-store key. Never derived from user input.
-  storageKey String    @unique
-  ownerId   String     @db.Uuid
-  folderId  String?    @db.Uuid
-  status    FileStatus @default(PENDING)
-  isTrashed Boolean    @default(false)
-  trashedAt DateTime?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  storageKey String     @unique
+  ownerId    String     @db.Uuid
+  folderId   String?    @db.Uuid
+  status     FileStatus @default(PENDING)
+  isTrashed  Boolean    @default(false)
+  trashedAt  DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
-  owner  User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  folder Folder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  shares Share[]
+  owner    User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  folder   Folder?       @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  shares   Share[]
+  versions FileVersion[]
 
   @@index([ownerId, folderId, isTrashed])
   @@index([ownerId, isTrashed, createdAt])
   @@index([ownerId, status])
 }
 
+/// An older revision of a file. Only premium accounts can create them.
+model FileVersion {
+  id            String            @id @default(uuid()) @db.Uuid
+  fileId        String            @db.Uuid
+  /// Opaque object-store key of the archived bytes.
+  storageKey    String            @unique
+  /// Size in bytes.
+  size          BigInt            @default(0)
+  mimeType      String
+  /// Monotonically increasing revision number (1 = oldest kept revision).
+  versionNumber Int
+  status        FileVersionStatus @default(READY)
+  createdAt     DateTime          @default(now())
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([fileId, versionNumber])
+}
+
 model Share {
-  id          String          @id @default(uuid()) @db.Uuid
+  id           String          @id @default(uuid()) @db.Uuid
   /// Public, unguessable token used in share links.
-  token       String          @unique
-  fileId      String?         @db.Uuid
-  folderId    String?         @db.Uuid
-  ownerId     String          @db.Uuid
+  token        String          @unique
+  fileId       String?         @db.Uuid
+  folderId     String?         @db.Uuid
+  ownerId      String          @db.Uuid
   /// Optional: when set the share is restricted to a specific account.
-  recipientId String?         @db.Uuid
-  permission  SharePermission @default(VIEW)
-  expiresAt   DateTime?
-  createdAt   DateTime        @default(now())
+  recipientId  String?         @db.Uuid
+  permission   SharePermission @default(VIEW)
+  expiresAt    DateTime?
+  createdAt    DateTime        @default(now())
   lastAccessAt DateTime?
 
-  owner     User     @relation("ShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  recipient User?    @relation("ShareRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  file      File?    @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  owner     User    @relation("ShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recipient User?   @relation("ShareRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  file      File?   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folder    Folder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, createdAt])
   @@index([recipientId, createdAt])

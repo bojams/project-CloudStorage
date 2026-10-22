@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/client";
-import { getStorageUsage } from "@/lib/db/queries/drive";
+import { getStorageUsage, getUserPlan } from "@/lib/db/queries/account";
 import { logServerError, toActionError } from "@/lib/errors";
 import { fail, ok, type ActionResult } from "@/lib/result";
 import { LIMITERS, rateLimit } from "@/lib/security/rate-limit";
@@ -68,6 +68,16 @@ export async function requestUploadAction(
       return fail(
         "UNSUPPORTED_MEDIA",
         `Files of type "${input.mimeType}" cannot be uploaded.`,
+      );
+    }
+
+    // The plan decides how large a single file may be (100 MB on the free
+    // tier, 2 GB on premium).
+    const { effective } = await getUserPlan(user.id);
+    if (input.size > effective.maxFileSizeBytes) {
+      return fail(
+        "VALIDATION_ERROR",
+        `Files larger than ${Math.round(effective.maxFileSizeBytes / (1024 * 1024))} MB are not allowed on the ${effective.name} plan.`,
       );
     }
 

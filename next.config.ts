@@ -64,9 +64,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // The download endpoints deliver untrusted bytes and therefore carry
-        // their own, much stricter policy (see `src/lib/http/headers.ts`).
-        source: "/:path((?!api/files/.*/download|api/public/.*/download).*)",
+        // The download endpoints and the profile photo deliver untrusted bytes
+        // and therefore carry their own, much stricter policy (see
+        // `src/lib/http/headers.ts`).
+        source:
+          "/:path((?!api/files/.*/download|api/public/.*/download|api/profile/avatar).*)",
         headers: securityHeaders,
       },
     ];

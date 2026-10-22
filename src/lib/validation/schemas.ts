@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import {
   MAX_NAME_LENGTH,
-  MAX_UPLOAD_SIZE,
+  MAX_UPLOAD_SIZE_ABSOLUTE,
   MAX_FOLDER_DEPTH,
 } from "@/lib/constants";
 
@@ -86,7 +86,7 @@ export const uploadRequestSchema = z.object({
     .number({ error: "File size is required." })
     .int()
     .positive("File size must be greater than zero.")
-    .max(MAX_UPLOAD_SIZE, "File is too large."),
+    .max(MAX_UPLOAD_SIZE_ABSOLUTE, "File is too large."),
   mimeType: z
     .string()
     .min(1)
@@ -101,7 +101,7 @@ export const completeUploadSchema = z.object({
     .number()
     .int()
     .positive()
-    .max(MAX_UPLOAD_SIZE),
+    .max(MAX_UPLOAD_SIZE_ABSOLUTE),
 });
 
 export const abortUploadSchema = z.object({
@@ -123,6 +123,41 @@ export const shareRevokeSchema = z.object({
 
 export const folderDepthSchema = z.number().int().min(0).max(MAX_FOLDER_DEPTH);
 
+/** Payload of a request that uploads a new revision of an existing file. */
+export const versionUploadRequestSchema = z.object({
+  fileId: uuidSchema,
+  fileName: nameField,
+  size: z
+    .number({ error: "File size is required." })
+    .int()
+    .positive("File size must be greater than zero.")
+    .max(MAX_UPLOAD_SIZE_ABSOLUTE, "File is too large."),
+  mimeType: z
+    .string()
+    .min(1)
+    .max(255)
+    .transform((value) => value.split(";")[0]?.trim().toLowerCase() ?? ""),
+});
+
+export const versionCompleteSchema = z.object({
+  fileId: uuidSchema,
+  versionId: uuidSchema,
+  size: z
+    .number()
+    .int()
+    .positive()
+    .max(MAX_UPLOAD_SIZE_ABSOLUTE),
+});
+
+export const versionSelectSchema = z.object({
+  fileId: uuidSchema,
+  versionId: uuidSchema,
+});
+
+export const planChangeSchema = z.object({
+  plan: z.enum(["FREE", "PREMIUM"]),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type CreateFolderInput = z.infer<typeof createFolderSchema>;
@@ -135,3 +170,9 @@ export type CompleteUploadInput = z.infer<typeof completeUploadSchema>;
 export type AbortUploadInput = z.infer<typeof abortUploadSchema>;
 export type ShareCreateInput = z.infer<typeof shareCreateSchema>;
 export type ShareRevokeInput = z.infer<typeof shareRevokeSchema>;
+export type VersionUploadRequestInput = z.infer<
+  typeof versionUploadRequestSchema
+>;
+export type VersionCompleteInput = z.infer<typeof versionCompleteSchema>;
+export type VersionSelectInput = z.infer<typeof versionSelectSchema>;
+export type PlanChangeInput = z.infer<typeof planChangeSchema>;

@@ -5,6 +5,7 @@ import { DriveShell } from "@/components/dashboard/drive-shell";
 import { getCurrentUser } from "@/lib/auth/session";
 import { ROUTES } from "@/lib/constants";
 import { listTrash } from "@/lib/db/queries/drive";
+import { purgeExpiredTrash } from "@/lib/trash/retention";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,11 @@ export default async function TrashPage({ searchParams }: TrashPageProps) {
   if (!user) redirect(ROUTES.login);
 
   const { q } = await searchParams;
+
+  // Items that outlived the retention period of the plan are removed
+  // together with their objects before the trash is rendered.
+  await purgeExpiredTrash(user.id);
+
   const items = await listTrash(user.id);
 
   const query = q?.trim().toLowerCase() ?? "";

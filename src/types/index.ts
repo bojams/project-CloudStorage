@@ -4,6 +4,8 @@
  * across the React Server Component boundary.
  */
 
+import type { PlanId } from "@/lib/plans";
+
 export type ItemType = "file" | "folder";
 
 export type ViewMode = "grid" | "list";
@@ -86,4 +88,17 @@ export interface SessionUser {
   readonly email: string;
   readonly image: string | null;
   readonly role: "USER" | "ADMIN";
+  /** Subscription tier of the account. */
+  readonly plan: PlanId;
+  /** True while the premium features are unlocked. */
+  readonly isPremium: boolean;
+}
+
+/** An archived revision of a file (premium feature). */
+export interface FileVersionSummary {
+  readonly id: string;
+  readonly versionNumber: number;
+  readonly size: number;
+  readonly mimeType: string;
+  readonly createdAt: string;
 }

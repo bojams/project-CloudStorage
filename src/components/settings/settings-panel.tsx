@@ -6,6 +6,8 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
+import { PlanCard } from "@/components/settings/plan-card";
+import { ProfilePhotoCard } from "@/components/settings/profile-photo-card";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -27,9 +29,10 @@ import type { SessionUser, StorageUsage } from "@/types";
 interface SettingsPanelProps {
   readonly user: SessionUser;
   readonly usage: StorageUsage;
+  readonly planExpiresAt: string | null;
 }
 
-export function SettingsPanel({ user, usage }: SettingsPanelProps) {
+export function SettingsPanel({ user, usage, planExpiresAt }: SettingsPanelProps) {
   const [name, setName] = useState(user.name);
   const [isSavingProfile, startProfileTransition] = useTransition();
 
@@ -92,6 +95,8 @@ export function SettingsPanel({ user, usage }: SettingsPanelProps) {
         </p>
       </header>
 
+      <ProfilePhotoCard name={user.name} image={user.image} />
+
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -134,6 +139,13 @@ export function SettingsPanel({ user, usage }: SettingsPanelProps) {
           </form>
         </CardContent>
       </Card>
+
+      <PlanCard
+        plan={user.plan}
+        isPremium={user.isPremium}
+        planExpiresAt={planExpiresAt}
+        usage={usage}
+      />
 
       <Card className="border-border/70">
         <CardHeader>

@@ -141,14 +141,24 @@ describe("uploadRequestSchema", () => {
     ).toBe(false);
   });
 
-  it("rejects a size above the upload limit", () => {
+  it("rejects a size above the absolute upload limit", () => {
     expect(
       uploadRequestSchema.safeParse({
         fileName: "a.bin",
-        size: 1024 * 1024 * 1024,
+        size: 3 * 1024 * 1024 * 1024,
         mimeType: "application/octet-stream",
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts a size that only the premium tier may upload", () => {
+    expect(
+      uploadRequestSchema.safeParse({
+        fileName: "a.bin",
+        size: 512 * 1024 * 1024,
+        mimeType: "application/octet-stream",
+      }).success,
+    ).toBe(true);
   });
 });
 

@@ -179,28 +179,6 @@ export async function listTrash(ownerId: string): Promise<DriveItem[]> {
   );
 }
 
-export async function getStorageUsage(ownerId: string) {
-  // The aggregate already returns the number of matching rows, so a second
-  // `count` query would only add latency to every navigation.
-  const [aggregate, user] = await Promise.all([
-    prisma.file.aggregate({
-      where: { ownerId, isTrashed: false, status: FileStatus.READY },
-      _sum: { size: true },
-      _count: { _all: true },
-    }),
-    prisma.user.findUnique({
-      where: { id: ownerId },
-      select: { storageQuota: true },
-    }),
-  ]);
-
-  return {
-    used: Number(aggregate._sum.size ?? 0),
-    quota: Number(user?.storageQuota ?? 0),
-    fileCount: aggregate._count._all,
-  };
-}
-
 export async function getFolderTree(ownerId: string): Promise<FolderNode[]> {
   const folders = await prisma.folder.findMany({
     where: { ownerId, isTrashed: false },

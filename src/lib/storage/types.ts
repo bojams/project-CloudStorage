@@ -49,6 +49,17 @@ export interface StorageDriver {
 
   /** Reads the whole object into memory (used by the local download proxy). */
   readObject(key: string): Promise<Buffer | null>;
+
+  /**
+   * Writes a buffer that was already validated by the caller.
+   * Used for small objects that never leave the application server
+   * (profile photos).
+   */
+  writeObject(
+    key: string,
+    data: Buffer,
+    contentType: string,
+  ): Promise<void>;
 }
 
 export class StorageError extends Error {
@@ -58,12 +69,39 @@ export class StorageError extends Error {
   }
 }
 
-const STORAGE_KEY_PATTERN =
-  /^u\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+
+/**
+ * Every key lives in one of three namespaces:
+ *
+ *   `u/<userId>/<fileId>`               — the current bytes of a file
+ *   `a/<userId>/<avatarId>`             — the profile photo
+ *   `v/<userId>/<fileId>/<versionId>`   — an archived revision
+ *
+ * The user id is part of the key, so a bug can never let one account read
+ * another account's objects.
+ */
+const STORAGE_KEY_PATTERN = new RegExp(
+  `^(?:u|a)/${UUID_PATTERN}/${UUID_PATTERN}$|^v/${UUID_PATTERN}/${UUID_PATTERN}/${UUID_PATTERN}$`,
+);
 
 /** Builds an opaque storage key. Never derived from user input. */
 export function buildStorageKey(userId: string, fileId: string): string {
   return `u/${userId}/${fileId}`;
+}
+
+/** Builds the storage key of a profile photo. */
+export function buildAvatarStorageKey(userId: string, avatarId: string): string {
+  return `a/${userId}/${avatarId}`;
+}
+
+/** Builds the storage key of an archived file revision. */
+export function buildVersionStorageKey(
+  userId: string,
+  fileId: string,
+  versionId: string,
+): string {
+  return `v/${userId}/${fileId}/${versionId}`;
 }
 
 /**

@@ -107,10 +107,7 @@ export class LocalStorageDriver implements StorageDriver {
   }
 
   /** Persists a buffer that was already validated by the upload route. */
-  async writeObject(
-    key: string,
-    data: Buffer,
-  ): Promise<void> {
+  async writeObject(key: string, data: Buffer): Promise<void> {
     const target = this.resolvePath(key);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, data);

@@ -6,7 +6,10 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/client";
 import { logServerError, toActionError } from "@/lib/errors";
 import { fail, ok, type ActionResult } from "@/lib/result";
-import { getStorageDriver } from "@/lib/storage";
+import {
+  deleteFileObjects,
+  deleteFileWithObjects,
+} from "@/lib/storage/cleanup";
 import { deleteSchema, uuidSchema } from "@/lib/validation/schemas";
 import type { ShareSummary } from "@/types";
 
@@ -32,27 +35,24 @@ export async function permanentlyDeleteItemAction(
 
       const files = await prisma.file.findMany({
         where: { ownerId: user.id, folderId: folder.id },
-        select: { id: true, storageKey: true },
+        select: {
+          id: true,
+          storageKey: true,
+          versions: { select: { storageKey: true } },
+        },
       });
 
-      const driver = getStorageDriver();
-      await Promise.all(
-        files.map((file) =>
-          driver.deleteObject(file.storageKey).catch(() => undefined),
-        ),
-      );
+      await deleteFileObjects(files);
 
       await prisma.folder.delete({ where: { id: folder.id } }).catch(() => undefined);
     } else {
       const file = await prisma.file.findFirst({
         where: { id: input.id, ownerId: user.id },
-        select: { id: true, storageKey: true },
+        select: { id: true },
       });
       if (!file) return fail("NOT_FOUND", "File not found.");
 
-      const driver = getStorageDriver();
-      await driver.deleteObject(file.storageKey).catch(() => undefined);
-      await prisma.file.delete({ where: { id: file.id } }).catch(() => undefined);
+      await deleteFileWithObjects(file.id);
     }
 
     revalidatePath("/drive", "layout");
@@ -71,7 +71,11 @@ export async function emptyTrashAction(): Promise<ActionResult<{ count: number }
 
     const files = await prisma.file.findMany({
       where: { ownerId: user.id, isTrashed: true },
-      select: { id: true, storageKey: true },
+      select: {
+        id: true,
+        storageKey: true,
+        versions: { select: { storageKey: true } },
+      },
     });
 
     const folders = await prisma.folder.findMany({
@@ -79,12 +83,7 @@ export async function emptyTrashAction(): Promise<ActionResult<{ count: number }
       select: { id: true },
     });
 
-    const driver = getStorageDriver();
-    await Promise.all(
-      files.map((file) =>
-        driver.deleteObject(file.storageKey).catch(() => undefined),
-      ),
-    );
+    await deleteFileObjects(files);
 
     await prisma.file.deleteMany({ where: { ownerId: user.id, isTrashed: true } });
     await prisma.folder.deleteMany({

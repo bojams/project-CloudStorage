@@ -3,11 +3,13 @@
 import {
   Clock,
   Cloud,
+  Crown,
   FolderPlus,
   HardDrive,
   LogOut,
   Settings,
   Share2,
+  Sparkles,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -222,6 +224,27 @@ function UserMenu({ user }: UserMenuProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top" className="w-56">
         <DropdownMenuLabel>My account</DropdownMenuLabel>
+        {user.isPremium ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/settings">
+                <Crown className="size-4 text-primary" />
+                Premium plan
+              </Link>
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/settings">
+                <Sparkles className="size-4 text-primary" />
+                Upgrade to Premium
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/settings">

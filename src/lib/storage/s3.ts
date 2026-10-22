@@ -135,4 +135,22 @@ export class S3StorageDriver implements StorageDriver {
       return null;
     }
   }
+
+  async writeObject(
+    key: string,
+    data: Buffer,
+    contentType: string,
+  ): Promise<void> {
+    assertSafeStorageKey(key);
+
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: data,
+        ContentType: contentType,
+        ServerSideEncryption: "AES256",
+      }),
+    );
+  }
 }

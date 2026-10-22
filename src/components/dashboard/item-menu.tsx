@@ -3,11 +3,14 @@
 import {
   Download,
   FolderInput,
+  History,
+  Lock,
   Pencil,
   RotateCcw,
   Share2,
   Trash2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import {
   DropdownMenuItem,
@@ -26,6 +29,10 @@ export interface ItemMenuProps {
   readonly onMove: (item: DriveItem) => void;
   readonly onDelete: (item: DriveItem) => void;
   readonly onRestore: (item: DriveItem) => void;
+  /** Opens the version history (premium feature). */
+  readonly onVersions: (item: DriveItem) => void;
+  /** Whether the account may use the premium features. */
+  readonly isPremium: boolean;
 }
 
 export type ItemActions = Omit<ItemMenuProps, "item" | "mode">;
@@ -42,7 +49,20 @@ export function ItemMenuItems({
   onMove,
   onDelete,
   onRestore,
+  onVersions,
+  isPremium,
 }: ItemMenuProps) {
+  const router = useRouter();
+
+  const openVersions = () => {
+    if (isPremium) {
+      onVersions(item);
+      return;
+    }
+
+    router.push("/settings");
+  };
+
   if (mode === "trash") {
     return (
       <>
@@ -87,6 +107,22 @@ export function ItemMenuItems({
             Move to…
           </DropdownMenuItem>
 
+          {item.type === "file" ? (
+            <DropdownMenuItem onSelect={openVersions}>
+              {isPremium ? (
+                <History className="size-4" />
+              ) : (
+                <Lock className="size-4 text-muted-foreground" />
+              )}
+              Version history
+              {!isPremium ? (
+                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  Premium
+                </span>
+              ) : null}
+            </DropdownMenuItem>
+          ) : null}
+
           <DropdownMenuSeparator />
 
           <DropdownMenuItem destructive onSelect={() => onDelete(item)}>
@@ -108,7 +144,20 @@ export function ContextMenuItems({
   onMove,
   onDelete,
   onRestore,
+  onVersions,
+  isPremium,
 }: ItemMenuProps) {
+  const router = useRouter();
+
+  const openVersions = () => {
+    if (isPremium) {
+      onVersions(item);
+      return;
+    }
+
+    router.push("/settings");
+  };
+
   if (mode === "trash") {
     return (
       <>
@@ -152,6 +201,22 @@ export function ContextMenuItems({
             <FolderInput className="size-4" />
             Move to…
           </ContextMenuItem>
+
+          {item.type === "file" ? (
+            <ContextMenuItem onSelect={openVersions}>
+              {isPremium ? (
+                <History className="size-4" />
+              ) : (
+                <Lock className="size-4 text-muted-foreground" />
+              )}
+              Version history
+              {!isPremium ? (
+                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  Premium
+                </span>
+              ) : null}
+            </ContextMenuItem>
+          ) : null}
 
           <ContextMenuSeparator />
 

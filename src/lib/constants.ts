@@ -1,7 +1,13 @@
 /** Shared, dependency-free constants used across the application. */
 
-/** Maximum size of a single upload (bytes). */
+/** Maximum size of a single upload on the free tier (bytes). */
 export const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100 MB
+
+/**
+ * Hard upper bound the server accepts for a single upload, regardless of the
+ * plan. The plan limit (see `src/lib/plans.ts`) is enforced on top of it.
+ */
+export const MAX_UPLOAD_SIZE_ABSOLUTE = 2 * 1024 * 1024 * 1024; // 2 GB
 
 /** Default per-user storage quota (bytes). */
 export const DEFAULT_STORAGE_QUOTA = 5 * 1024 * 1024 * 1024; // 5 GB

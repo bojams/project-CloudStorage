@@ -10,6 +10,7 @@ import {
   requestUploadAction,
 } from "@/lib/actions/uploads";
 import { MAX_UPLOAD_SIZE } from "@/lib/constants";
+import { uploadWithProgress } from "@/lib/client/upload";
 import { inferMimeTypeFromName, isAllowedMimeType } from "@/lib/security/mime";
 import type { UploadStatus, UploadTask } from "@/types";
 
@@ -47,6 +48,7 @@ interface InternalTask {
 
 export function useUploadManager(
   onCompleted?: () => void,
+  maxFileSizeBytes: number = MAX_UPLOAD_SIZE,
 ): UploadManager {
   const router = useRouter();
   const [tasks, setTasks] = useState<InternalTask[]>([]);
@@ -54,6 +56,8 @@ export function useUploadManager(
   const queueRef = useRef<InternalTask[]>([]);
   const onCompletedRef = useRef(onCompleted);
   onCompletedRef.current = onCompleted;
+  const maxSizeRef = useRef(maxFileSizeBytes);
+  maxSizeRef.current = maxFileSizeBytes;
 
   const patchTask = useCallback(
     (taskId: string, patch: Partial<InternalTask>) => {
@@ -80,7 +84,7 @@ export function useUploadManager(
         return;
       }
 
-      if (task.size > MAX_UPLOAD_SIZE) {
+      if (task.size > maxSizeRef.current) {
         patchTask(task.id, {
           status: "failed",
           error: "File exceeds the maximum upload size.",
@@ -240,55 +244,4 @@ export function useUploadManager(
     dismiss,
     clearFinished,
   };
-}
-
-function uploadWithProgress(
-  file: File | null,
-  url: string,
-  headers: Record<string, string>,
-  onProgress: (percent: number) => void,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!file) {
-      reject(new Error("The file is no longer available."));
-      return;
-    }
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url, true);
-    xhr.responseType = "json";
-
-    for (const [key, value] of Object.entries(headers)) {
-      try {
-        xhr.setRequestHeader(key, value);
-      } catch {
-        // The browser refused the header — it is safe to skip it.
-      }
-    }
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && event.total > 0) {
-        onProgress(
-          Math.min(99, Math.round((event.loaded / event.total) * 100)),
-        );
-      }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-        return;
-      }
-
-      const message =
-        (xhr.response as { error?: string } | null)?.error ??
-        `Upload failed with status ${xhr.status}.`;
-      reject(new Error(message));
-    };
-
-    xhr.onerror = () => reject(new Error("The network connection was lost."));
-    xhr.onabort = () => reject(new Error("The upload was canceled."));
-
-    xhr.send(file);
-  });
 }
