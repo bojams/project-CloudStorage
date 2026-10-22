@@ -176,12 +176,44 @@ its size matches the announced size before the row is flipped to `READY`.
 | `npm start` | Serve the production build |
 | `npm run lint` | ESLint (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run check` | typecheck → lint → build |
+| `npm run test` | Unit tests (Vitest) |
+| `npm run test:watch` | Unit tests in watch mode |
+| `npm run test:coverage` | Unit tests with a V8 coverage report |
+| `npm run check` | typecheck → lint → test → build |
 | `npm run db:generate` | Regenerate the Prisma client |
 | `npm run db:migrate` | Create/apply a development migration |
 | `npm run db:deploy` | Apply migrations in production |
 | `npm run db:seed` | Seed a demo user and folder tree |
 | `npm run db:studio` | Prisma Studio |
+
+---
+
+## Testing
+
+The suite is written with [Vitest](https://vitest.dev) and runs entirely in Node — no database,
+no network and no browser are required:
+
+```bash
+npm run test            # single run
+npm run test:watch      # watch mode
+npm run test:coverage   # V8 coverage report (coverage/ is git-ignored)
+```
+
+It covers the parts of the system where a regression would be silent and expensive:
+
+| Area | File | What is asserted |
+| --- | --- | --- |
+| Name sanitisation | `src/lib/security/sanitize.test.ts` | Path separators, control characters, reserved device names, XSS payloads |
+| MIME allow-list | `src/lib/security/mime.test.ts` | Scriptable types are rejected, extension inference, inline safety |
+| Magic bytes | `src/lib/security/magic-bytes.test.ts` | A payload that lies about its type is rejected |
+| Rate limiting | `src/lib/security/rate-limit.test.ts` | Window behaviour, per-key isolation, client identifier extraction |
+| Upload grants | `src/lib/storage/signing.test.ts` | Signature, tampering and expiry |
+| Storage keys | `src/lib/storage/types.test.ts` | Traversal attempts are rejected |
+| Local driver | `src/lib/storage/local.test.ts` | Round-trip, deletion, containment inside the storage root |
+| Passwords | `src/lib/auth/password.test.ts` | Hashing, salting, verification, malformed hashes |
+| Schemas | `src/lib/validation/schemas.test.ts` | Every mutation input is validated |
+| Mappers | `src/lib/db/mappers.test.ts` | `BigInt` columns become JSON-safe numbers |
+| Envelope & utils | `src/lib/result.test.ts`, `src/lib/utils.test.ts` | Result contract, byte/date formatting |
 
 ---
 
@@ -195,7 +227,9 @@ The application is written against the OWASP Top 10:
 - **Path traversal** — object keys are server-generated (`u/<userId>/<fileId>`) and validated with
   `assertSafeStorageKey()`; the resolved path is verified to stay inside the storage root.
 - **XSS** — React escapes by default, user-supplied text is additionally sanitised with DOMPurify,
-  and the CSP forbids third-party scripts.
+  and the CSP forbids third-party scripts. Scriptable payloads (HTML, XHTML, SVG) are rejected at
+  upload time, and every download is served with `nosniff`, a restrictive `Content-Security-Policy`
+  and an `attachment` disposition unless the type is safe to render inline.
 - **CSRF** — Server Actions are protected by Next.js origin checks; state-changing API routes are
   session-bound.
 - **Authentication abuse** — rate limiting on sign-in, registration and uploads (in-memory or
