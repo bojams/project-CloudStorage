@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Typecheck, lint & build
+    name: Typecheck, lint, test & build
     runs-on: ubuntu-latest
 
     steps:
@@ -37,6 +37,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
 
       - name: Build
         run: npm run build
