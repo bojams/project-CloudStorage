@@ -44,6 +44,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   outputFileTracingRoot: path.join(__dirname),
   reactStrictMode: true,
+  // Hides the "N" dev-tools badge in the corner of the browser window. It
+  // overlaps the application UI and is only useful when debugging Next.js
+  // itself.
+  devIndicators: false,
   // Allows building a production bundle into a separate directory, which is
   // handy when a development server is already running on the default one.
   distDir: process.env.NEXT_DIST_DIR || ".next",
