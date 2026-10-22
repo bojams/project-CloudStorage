@@ -1,6 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowDownAZ,
   Clock,
@@ -14,16 +13,11 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Breadcrumbs } from "@/components/dashboard/breadcrumbs";
-import { DeleteDialog, RestoreDialog } from "@/components/dashboard/dialogs/delete-dialog";
-import { MoveDialog } from "@/components/dashboard/dialogs/move-dialog";
-import { NewFolderDialog } from "@/components/dashboard/dialogs/new-folder-dialog";
-import { PreviewDialog } from "@/components/dashboard/dialogs/preview-dialog";
-import { RenameDialog } from "@/components/dashboard/dialogs/rename-dialog";
-import { ShareDialog } from "@/components/dashboard/dialogs/share-dialog";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { FileGrid } from "@/components/dashboard/file-grid";
 import { FileList } from "@/components/dashboard/file-list";
@@ -43,6 +37,59 @@ import {
 import { useUploadManager } from "@/hooks/use-upload-manager";
 import { cn } from "@/lib/utils";
 import type { Breadcrumb, DriveItem, SortDirection, SortKey, ViewMode } from "@/types";
+
+/**
+ * The dialogs are loaded on demand.
+ *
+ * Every dialog pulls in a sizeable amount of client side code (the share
+ * dialog alone drags in the whole select primitive). Splitting them into
+ * separate chunks keeps the initial payload of the drive small, which is what
+ * the browser has to download and parse before the page becomes interactive.
+ *
+ * The loaders are shared with the idle preloading below, so warming them up
+ * in the background reuses the exact same chunks.
+ */
+const loadNewFolderDialog = () =>
+  import("@/components/dashboard/dialogs/new-folder-dialog");
+const loadRenameDialog = () =>
+  import("@/components/dashboard/dialogs/rename-dialog");
+const loadMoveDialog = () =>
+  import("@/components/dashboard/dialogs/move-dialog");
+const loadShareDialog = () =>
+  import("@/components/dashboard/dialogs/share-dialog");
+const loadDeleteDialog = () =>
+  import("@/components/dashboard/dialogs/delete-dialog");
+const loadPreviewDialog = () =>
+  import("@/components/dashboard/dialogs/preview-dialog");
+
+const NewFolderDialog = dynamic(
+  () => loadNewFolderDialog().then((module) => module.NewFolderDialog),
+  { ssr: false },
+);
+const RenameDialog = dynamic(
+  () => loadRenameDialog().then((module) => module.RenameDialog),
+  { ssr: false },
+);
+const MoveDialog = dynamic(
+  () => loadMoveDialog().then((module) => module.MoveDialog),
+  { ssr: false },
+);
+const ShareDialog = dynamic(
+  () => loadShareDialog().then((module) => module.ShareDialog),
+  { ssr: false },
+);
+const DeleteDialog = dynamic(
+  () => loadDeleteDialog().then((module) => module.DeleteDialog),
+  { ssr: false },
+);
+const RestoreDialog = dynamic(
+  () => loadDeleteDialog().then((module) => module.RestoreDialog),
+  { ssr: false },
+);
+const PreviewDialog = dynamic(
+  () => loadPreviewDialog().then((module) => module.PreviewDialog),
+  { ssr: false },
+);
 
 const VIEW_STORAGE_KEY = "nimbus.drive.view";
 
@@ -90,6 +137,43 @@ export function DriveView({
   useEffect(() => {
     const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
     if (stored === "grid" || stored === "list") setViewMode(stored);
+  }, []);
+
+  /**
+   * Warm up the dialog chunks while the browser is idle.
+   *
+   * The dialogs are split out of the initial payload, but they still have to
+   * be there the moment the user asks for them. Downloading them after the
+   * page became interactive keeps the hard refresh fast and still opens the
+   * dialogs without a visible delay.
+   */
+  useEffect(() => {
+    const connection = (
+      navigator as Navigator & {
+        connection?: { saveData?: boolean; effectiveType?: string };
+      }
+    ).connection;
+
+    // Respect the user's data saver — on a metered connection the chunks are
+    // downloaded when a dialog is actually opened.
+    if (connection?.saveData || connection?.effectiveType === "2g") return;
+
+    const warmUp = () => {
+      void loadNewFolderDialog();
+      void loadRenameDialog();
+      void loadMoveDialog();
+      void loadShareDialog();
+      void loadDeleteDialog();
+      void loadPreviewDialog();
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(warmUp, { timeout: 3000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+
+    const handle = window.setTimeout(warmUp, 1500);
+    return () => window.clearTimeout(handle);
   }, []);
 
   /**
@@ -272,31 +356,26 @@ export function DriveView({
             }
           />
         ) : (
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={viewMode}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {viewMode === "grid" ? (
-                <FileGrid
-                  items={sortedItems}
-                  mode={mode}
-                  actions={actions}
-                  onOpen={handleOpen}
-                />
-              ) : (
-                <FileList
-                  items={sortedItems}
-                  mode={mode}
-                  actions={actions}
-                  onOpen={handleOpen}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
+          <div
+            key={viewMode}
+            className="animate-rise-in"
+          >
+            {viewMode === "grid" ? (
+              <FileGrid
+                items={sortedItems}
+                mode={mode}
+                actions={actions}
+                onOpen={handleOpen}
+              />
+            ) : (
+              <FileList
+                items={sortedItems}
+                mode={mode}
+                actions={actions}
+                onOpen={handleOpen}
+              />
+            )}
+          </div>
         )}
       </UploadDropzone>
 
@@ -307,68 +386,82 @@ export function DriveView({
         onClearFinished={uploadManager.clearFinished}
       />
 
-      <NewFolderDialog
-        open={newFolderOpen}
-        onOpenChange={setNewFolderOpen}
-        parentId={currentFolderId}
-      />
+      {newFolderOpen ? (
+        <NewFolderDialog
+          open
+          onOpenChange={setNewFolderOpen}
+          parentId={currentFolderId}
+        />
+      ) : null}
 
-      <RenameDialog
-        open={renameTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setRenameTarget(null);
-        }}
-        item={renameTarget}
-      />
+      {renameTarget ? (
+        <RenameDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setRenameTarget(null);
+          }}
+          item={renameTarget}
+        />
+      ) : null}
 
-      <MoveDialog
-        open={moveTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setMoveTarget(null);
-        }}
-        item={moveTarget}
-      />
+      {moveTarget ? (
+        <MoveDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setMoveTarget(null);
+          }}
+          item={moveTarget}
+        />
+      ) : null}
 
-      <ShareDialog
-        open={shareTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setShareTarget(null);
-        }}
-        item={shareTarget}
-      />
+      {shareTarget ? (
+        <ShareDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setShareTarget(null);
+          }}
+          item={shareTarget}
+        />
+      ) : null}
 
-      <DeleteDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-        item={deleteTarget}
-        mode={mode}
-      />
+      {deleteTarget ? (
+        <DeleteDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null);
+          }}
+          item={deleteTarget}
+          mode={mode}
+        />
+      ) : null}
 
-      <RestoreDialog
-        open={restoreTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setRestoreTarget(null);
-        }}
-        item={restoreTarget}
-      />
+      {restoreTarget ? (
+        <RestoreDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setRestoreTarget(null);
+          }}
+          item={restoreTarget}
+        />
+      ) : null}
 
-      <PreviewDialog
-        open={previewTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setPreviewTarget(null);
-        }}
-        item={previewTarget}
-        onShare={(item) => {
-          setPreviewTarget(null);
-          setShareTarget(item);
-        }}
-        onRename={(item) => {
-          setPreviewTarget(null);
-          setRenameTarget(item);
-        }}
-      />
+      {previewTarget ? (
+        <PreviewDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setPreviewTarget(null);
+          }}
+          item={previewTarget}
+          onShare={(item) => {
+            setPreviewTarget(null);
+            setShareTarget(item);
+          }}
+          onRename={(item) => {
+            setPreviewTarget(null);
+            setRenameTarget(item);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

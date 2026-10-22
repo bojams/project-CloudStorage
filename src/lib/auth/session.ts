@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { auth } from "@/lib/auth";
 import type { Role } from "@prisma/client";
 
@@ -15,8 +17,11 @@ export interface CurrentUser {
  * Returns `null` when the request is anonymous — every action must handle
  * that case explicitly (defence in depth: the middleware already blocks
  * anonymous access to the app routes).
+ *
+ * The result is memoised per request: the layout and the page it renders both
+ * need the session, and decoding the token twice is pure overhead.
  */
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const session = await auth();
   const id = session?.user?.id;
 
@@ -28,4 +33,4 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     name: session.user.name ?? "User",
     role: session.user.role ?? "USER",
   };
-}
+});

@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { MoreHorizontal, Share2 } from "lucide-react";
 import Link from "next/link";
 
@@ -34,32 +33,25 @@ interface FileGridProps {
 
 /**
  * Grid (gallery) representation of the drive contents.
+ *
+ * The entrance animation is handled by CSS instead of a JavaScript animation
+ * library: with a large folder the difference is immediately noticeable,
+ * because the browser can animate the items without the main thread running a
+ * layout engine for every single tile.
  */
 export function FileGrid({ items, mode, actions, onOpen }: FileGridProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
-    >
+    <div className="animate-rise-in grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {items.map((item, index) => (
-        <motion.div
+        <div
           key={item.id}
-          layout
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{
-            duration: 0.22,
-            delay: Math.min(index * 0.015, 0.2),
-            ease: [0.16, 1, 0.3, 1],
-          }}
-          className="h-full"
+          className="animate-pop-in h-full"
+          style={{ animationDelay: `${Math.min(index * 0.015, 0.2)}s` }}
         >
           <ItemTile item={item} mode={mode} actions={actions} onOpen={onOpen} />
-        </motion.div>
+        </div>
       ))}
-    </motion.div>
+    </div>
   );
 }
 

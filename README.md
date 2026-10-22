@@ -47,7 +47,7 @@ interface, a hardened security posture and a full audit trail of the decisions t
 | Framework | Next.js 15 (App Router, React Server Components, Server Actions) |
 | Language | TypeScript 5 (strict) |
 | Styling | Tailwind CSS v4 (CSS-first `@theme`), Radix UI primitives, `tailwind-merge` |
-| Motion | Framer Motion (layout & progress animations) |
+| Motion | CSS keyframes & transitions (no animation runtime on the main thread) |
 | Icons | Lucide React |
 | Database | PostgreSQL 16 + Prisma 6 |
 | Auth | NextAuth v5 (Credentials provider, JWT sessions) |
@@ -132,6 +132,21 @@ npm run dev
 
 Open <http://localhost:3000>, register a new account or sign in with the seeded demo user.
 
+> **Development vs. production.** `next dev` serves unminified modules and re-compiles a route the
+> first time it is requested, so a hard refresh always feels slower than it is. For the real
+> experience build the app and serve the compiled output:
+>
+> ```bash
+> npm run build && npm start        # production build on :3000
+> ```
+>
+> A development server can stay online while doing so — the preview build is written to a separate
+> directory (`.next-prod`) and is served on port 3002:
+>
+> ```bash
+> npm run build:preview && npm run preview
+> ```
+
 ---
 
 ## Environment variables
@@ -174,6 +189,8 @@ its size matches the announced size before the row is flipped to `READY`.
 | `npm run dev` | Development server |
 | `npm run build` | `prisma generate` + production build |
 | `npm start` | Serve the production build |
+| `npm run build:preview` | Production build into `.next-prod` (keeps a running dev server intact) |
+| `npm run preview` | Serve the `.next-prod` build on port 3002 |
 | `npm run lint` | ESLint (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run test` | Unit tests (Vitest) |

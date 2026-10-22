@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import {
   Clock,
   Cloud,
@@ -124,12 +123,7 @@ export function SidebarContent({
         </Button>
 
         {isCreateOpen ? (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden"
-          >
+          <div className="animate-expand overflow-hidden">
             <div className="mt-1.5 space-y-0.5 rounded-xl border border-border bg-background/60 p-1">
               <button
                 type="button"
@@ -154,7 +148,7 @@ export function SidebarContent({
                 Upload files
               </button>
             </div>
-          </motion.div>
+          </div>
         ) : null}
       </div>
 
@@ -176,10 +170,7 @@ export function SidebarContent({
               )}
             >
               {isActive ? (
-                <motion.span
-                  layoutId="sidebar-active"
-                  className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-primary"
-                />
+                <span className="animate-fade-in absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-primary" />
               ) : null}
               <Icon className="size-4" />
               {item.label}

@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { MoreHorizontal, Share2 } from "lucide-react";
 import Link from "next/link";
 
@@ -34,15 +33,14 @@ interface FileListProps {
 
 /**
  * Compact, table-like representation of the drive contents.
+ *
+ * The rows fade in with a CSS animation (staggered through `animation-delay`)
+ * so that a folder with many files does not need a JavaScript animation
+ * runtime on the main thread.
  */
 export function FileList({ items, mode, actions, onOpen }: FileListProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className="overflow-hidden rounded-2xl border border-border/80 bg-card/60 shadow-xs"
-    >
+    <div className="animate-rise-in overflow-hidden rounded-2xl border border-border/80 bg-card/60 shadow-xs">
       <div className="hidden items-center gap-3 border-b border-border/70 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground md:flex">
         <span className="flex-1">Name</span>
         <span className="w-32 text-right">Size</span>
@@ -52,16 +50,10 @@ export function FileList({ items, mode, actions, onOpen }: FileListProps) {
 
       <ul className="divide-y divide-border/60">
         {items.map((item, index) => (
-          <motion.li
+          <li
             key={item.id}
-            layout
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: 0.2,
-              delay: Math.min(index * 0.012, 0.18),
-              ease: [0.16, 1, 0.3, 1],
-            }}
+            className="animate-fade-in"
+            style={{ animationDelay: `${Math.min(index * 0.012, 0.18)}s` }}
           >
             <ItemRow
               item={item}
@@ -69,10 +61,10 @@ export function FileList({ items, mode, actions, onOpen }: FileListProps) {
               actions={actions}
               onOpen={onOpen}
             />
-          </motion.li>
+          </li>
         ))}
       </ul>
-    </motion.div>
+    </div>
   );
 }
 

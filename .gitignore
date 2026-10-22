@@ -44,3 +44,5 @@ next-env.d.ts
 # local storage driver (uploaded files)
 .storage/
 
+# alternative production build directory (npm run build:preview)
+/.next-prod

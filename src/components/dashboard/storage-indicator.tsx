@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { HardDrive } from "lucide-react";
 
 import { formatBytes, formatPercent } from "@/lib/utils";
@@ -15,6 +14,10 @@ interface StorageIndicatorProps {
 /**
  * Storage usage meter. The bar animates smoothly whenever the usage
  * changes, which makes the component feel alive without being noisy.
+ *
+ * The width transition is a plain CSS transition: it is composited by the
+ * browser, so it never competes with the main thread while the drive list is
+ * being rendered.
  */
 export function StorageIndicator({
   used,
@@ -41,11 +44,9 @@ export function StorageIndicator({
           </span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-          <motion.div
-            className={`h-full rounded-full ${barColor}`}
-            initial={false}
-            animate={{ width: `${percent}%` }}
-            transition={{ type: "spring", stiffness: 120, damping: 20 }}
+          <div
+            className={`h-full rounded-full transition-[width] duration-500 ease-out ${barColor}`}
+            style={{ width: `${percent}%` }}
           />
         </div>
       </div>
@@ -65,11 +66,9 @@ export function StorageIndicator({
       </div>
 
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <motion.div
-          className={`h-full rounded-full ${barColor}`}
-          initial={false}
-          animate={{ width: `${percent}%` }}
-          transition={{ type: "spring", stiffness: 120, damping: 20 }}
+        <div
+          className={`h-full rounded-full transition-[width] duration-500 ease-out ${barColor}`}
+          style={{ width: `${percent}%` }}
         />
       </div>
 
